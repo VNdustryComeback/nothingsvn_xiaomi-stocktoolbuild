@@ -49,52 +49,21 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@main
-
-      - name: Install tools
+ 
+      - name: Install tools and send start notification
         run: |
           set -e
           set -o pipefail
-
           echo "[STEP] Install tools" | tee -a build_action.log
-
           pip install requests 2>&1 | tee -a build_action.log
-
-          sudo apt-get install -y \
-            aria2 \
-            jq \
-            rclone \
-            sshpass \
-            python-is-python3 \
-            wget \
-            python3 \
-            lz4 \
-            xz-utils \
-            device-tree-compiler \
-            zlib1g-dev \
-            gcc \
-            g++ \
-            libc6 \
-            libstdc++6 \
-            python3-pip \
-            dialog \
-            libgtk-3-dev \
-            aapt \
-            busybox \
-            zip \
-            erofs-utils \
-            unzip \
-            p7zip-full \
-            zipalign \
-            zstd \
-            bc \
-            android-sdk-libsparse-utils \
-            xmlstarlet \
-            2>&1 | tee -a build_action.log
-
+          sudo apt-get install -y aria2 jq rclone sshpass python-is-python3 wget python3 lz4 xz-utils device-tree-compiler zlib1g-dev gcc g++ libc6 libstdc++6 python3-pip dialog libgtk-3-dev aapt busybox zip erofs-utils unzip p7zip-full zipalign zstd bc android-sdk-libsparse-utils xmlstarlet 2>&1 | tee -a build_action.log
           sudo pip3 install ConfigObj 2>&1 | tee -a build_action.log
+          sudo pip3 install telebot 2>&1 | tee -a build_action.log
           sudo pip3 install setuptools 2>&1 | tee -a build_action.log
           sudo pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client 2>&1 | tee -a build_action.log
-
+          
+          
+  
       - name: Grant file permissions
         run: |
           sudo chmod 777 -R *
