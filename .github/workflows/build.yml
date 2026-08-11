@@ -16,9 +16,7 @@ on:
 jobs:
   Initialize:
     runs-on: ubuntu-latest
-    env:
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+
     steps:
       - name: Clean unused files and applications
         run: |
@@ -52,18 +50,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@main
 
-      - name: Install tools and send start notification
+      - name: Install tools
         run: |
           set -e
           set -o pipefail
+
           echo "[STEP] Install tools" | tee -a build_action.log
+
           pip install requests 2>&1 | tee -a build_action.log
-          sudo apt-get install -y aria2 jq rclone sshpass python-is-python3 wget python3 lz4 xz-utils device-tree-compiler zlib1g-dev gcc g++ libc6 libstdc++6 python3-pip dialog libgtk-3-dev aapt busybox zip erofs-utils unzip p7zip-full zipalign zstd bc android-sdk-libsparse-utils xmlstarlet 2>&1 | tee -a build_action.log
+
+          sudo apt-get install -y \
+            aria2 \
+            jq \
+            rclone \
+            sshpass \
+            python-is-python3 \
+            wget \
+            python3 \
+            lz4 \
+            xz-utils \
+            device-tree-compiler \
+            zlib1g-dev \
+            gcc \
+            g++ \
+            libc6 \
+            libstdc++6 \
+            python3-pip \
+            dialog \
+            libgtk-3-dev \
+            aapt \
+            busybox \
+            zip \
+            erofs-utils \
+            unzip \
+            p7zip-full \
+            zipalign \
+            zstd \
+            bc \
+            android-sdk-libsparse-utils \
+            xmlstarlet \
+            2>&1 | tee -a build_action.log
+
           sudo pip3 install ConfigObj 2>&1 | tee -a build_action.log
-          sudo pip3 install telebot 2>&1 | tee -a build_action.log
           sudo pip3 install setuptools 2>&1 | tee -a build_action.log
           sudo pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client 2>&1 | tee -a build_action.log
-          python notify.py start "${{ github.repository }}" "${{ inputs.input_url }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
 
       - name: Grant file permissions
         run: |
@@ -75,52 +105,44 @@ jobs:
         run: |
           set -e
           set -o pipefail
+
           echo "[STEP] Build ROM" | tee -a build_action.log
-          sudo bash build.sh "$INPUT_URL" "${{ github.repository }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}" 2>&1 | tee -a build_action.log
+
+          sudo bash build.sh \
+            "$INPUT_URL" \
+            "${{ github.repository }}" \
+            "xst" \
+            "${{ inputs.builder_name }}" \
+            "${{ inputs.builder_id }}" \
+            2>&1 | tee -a build_action.log
 
       - name: Pack ROM
         run: |
           set -e
           set -o pipefail
-          python notify.py pack "${{ github.repository }}" "${{ inputs.input_url }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+
           echo "[STEP] Pack ROM" | tee -a build_action.log
+
           sudo bash packROM.sh 2>&1 | tee -a build_action.log
 
       - name: Set up Rclone
         run: |
           set -e
           set -o pipefail
+
           echo "[STEP] Set up Rclone" | tee -a build_action.log
-          sudo -E bash uploadROM.sh setup "${{ secrets.GH_TOKEN }}" "${{ secrets.GH_REPO }}" "${{ secrets.RCLONE_TOKEN_PATH }}" 2>&1 | tee -a build_action.log
+
+          sudo -E bash uploadROM.sh setup \
+            "${{ secrets.GH_TOKEN }}" \
+            "${{ secrets.GH_REPO }}" \
+            "${{ secrets.RCLONE_TOKEN_PATH }}" \
+            2>&1 | tee -a build_action.log
 
       - name: Upload ROM to cloud
         run: |
           set -e
           set -o pipefail
-          python notify.py upload "${{ github.repository }}" "${{ inputs.input_url }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
+
           echo "[STEP] Upload ROM to cloud" | tee -a build_action.log
+
           sudo -E bash uploadROM.sh 2>&1 | tee -a build_action.log
-
-      - name: Send success notification
-        if: success()
-        env:
-          NOTIFY_WORKFLOW_CONCLUSION: success
-        run: |
-          python notify.py success "${{ github.repository }}" "${{ inputs.input_url }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
-
-      - name: Send failure notification
-        if: failure()
-        env:
-          NOTIFY_WORKFLOW_CONCLUSION: failure
-          NOTIFY_ERROR_LOG: build_action.log
-        run: |
-          python notify.py fail "${{ github.repository }}" "${{ inputs.input_url }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
-
-      - name: Send cancellation notification
-        if: cancelled()
-        env:
-          NOTIFY_WORKFLOW_CONCLUSION: cancelled
-          NOTIFY_ERROR_LOG: build_action.log
-          NOTIFY_ERROR_REASON: Workflow run was cancelled before completion.
-        run: |
-          python notify.py cancelled "${{ github.repository }}" "${{ inputs.input_url }}" "xst" "${{ inputs.builder_name }}" "${{ inputs.builder_id }}"
