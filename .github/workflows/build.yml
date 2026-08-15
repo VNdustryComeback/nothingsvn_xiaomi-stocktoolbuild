@@ -17,15 +17,49 @@ jobs:
   Initialize:
     runs-on: ubuntu-latest
 
+    timeout-minutes: 360
+
+    permissions:
+      actions: write
+
     steps:
+
+      # ============================================================
+      # CLEAN RUNNER
+      # ============================================================
+
       - name: Clean unused files and applications
         run: |
           docker rmi `docker images -q` || true
-          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/sudo apt/sources.list.d || true
-          sudo apt -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell mysql* php* || true
+
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /etc/mysql \
+            /etc/php \
+            /etc/sudo \
+            /etc/apt/sources.list.d || true
+
+          sudo apt -y purge \
+            azure-cli \
+            ghc* \
+            zulu* \
+            hhvm \
+            llvm* \
+            firefox \
+            google* \
+            dotnet* \
+            powershell \
+            mysql* \
+            php* || true
+
           sudo apt -y autoremove --purge || true
           sudo apt -y autoclean || true
           sudo apt clean || true
+
+
+      # ============================================================
+      # MAXIMIZE DISK
+      # ============================================================
 
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -36,10 +70,20 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
 
+
+      # ============================================================
+      # TIMEZONE
+      # ============================================================
+
       - name: Set timezone
         run: |
           echo "Setting Vietnam timezone"
           sudo timedatectl set-timezone Asia/Ho_Chi_Minh
+
+
+      # ============================================================
+      # JAVA
+      # ============================================================
 
       - name: Install OpenJDK
         uses: actions/setup-java@v4
@@ -47,26 +91,81 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@main
- 
-      - name: Install tools and send start notification
+
+
+      # ============================================================
+      # INSTALL BUILD TOOLS
+      # ============================================================
+
+      - name: Install tools
         run: |
           set -e
           set -o pipefail
+
           echo "[STEP] Install tools" | tee -a build_action.log
+
           pip install requests 2>&1 | tee -a build_action.log
-          sudo apt-get install -y aria2 jq rclone sshpass python-is-python3 wget python3 lz4 xz-utils device-tree-compiler zlib1g-dev gcc g++ libc6 libstdc++6 python3-pip dialog libgtk-3-dev aapt busybox zip erofs-utils unzip p7zip-full zipalign zstd bc android-sdk-libsparse-utils xmlstarlet 2>&1 | tee -a build_action.log
-          sudo pip3 install ConfigObj 2>&1 | tee -a build_action.log
-          sudo pip3 install telebot 2>&1 | tee -a build_action.log
-          sudo pip3 install setuptools 2>&1 | tee -a build_action.log
-          sudo pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client 2>&1 | tee -a build_action.log
-          
-          
-  
+
+          sudo apt-get install -y \
+            aria2 \
+            jq \
+            sshpass \
+            python-is-python3 \
+            wget \
+            python3 \
+            lz4 \
+            xz-utils \
+            device-tree-compiler \
+            zlib1g-dev \
+            gcc \
+            g++ \
+            libc6 \
+            libstdc++6 \
+            python3-pip \
+            dialog \
+            libgtk-3-dev \
+            aapt \
+            busybox \
+            zip \
+            erofs-utils \
+            unzip \
+            p7zip-full \
+            zipalign \
+            zstd \
+            bc \
+            android-sdk-libsparse-utils \
+            xmlstarlet \
+            2>&1 | tee -a build_action.log
+
+          sudo pip3 install ConfigObj \
+            2>&1 | tee -a build_action.log
+
+          sudo pip3 install telebot \
+            2>&1 | tee -a build_action.log
+
+          sudo pip3 install setuptools \
+            2>&1 | tee -a build_action.log
+
+
+      # ============================================================
+      # PERMISSIONS
+      # ============================================================
+
       - name: Grant file permissions
         run: |
-          sudo chmod 777 -R *
+          sudo chmod 777 -R .
+
+
+      # ============================================================
+      # BUILD ROM
+      # ============================================================
 
       - name: Build ROM
         env:
@@ -85,6 +184,11 @@ jobs:
             "${{ inputs.builder_id }}" \
             2>&1 | tee -a build_action.log
 
+
+      # ============================================================
+      # PACK ROM
+      # ============================================================
+
       - name: Pack ROM
         run: |
           set -e
@@ -92,26 +196,181 @@ jobs:
 
           echo "[STEP] Pack ROM" | tee -a build_action.log
 
-          sudo bash packROM.sh 2>&1 | tee -a build_action.log
-
-      - name: Set up Rclone
-        run: |
-          set -e
-          set -o pipefail
-
-          echo "[STEP] Set up Rclone" | tee -a build_action.log
-
-          sudo -E bash uploadROM.sh setup \
-            "${{ secrets.GH_TOKEN }}" \
-            "${{ secrets.GH_REPO }}" \
-            "${{ secrets.RCLONE_TOKEN_PATH }}" \
+          sudo bash packROM.sh \
             2>&1 | tee -a build_action.log
 
-      - name: Upload ROM to cloud
+
+      # ============================================================
+      # INSTALL CLOUDFLARED
+      # ============================================================
+
+      - name: Install Cloudflare Tunnel
         run: |
           set -e
-          set -o pipefail
 
-          echo "[STEP] Upload ROM to cloud" | tee -a build_action.log
+          echo "[STEP] Install cloudflared"
 
-          sudo -E bash uploadROM.sh 2>&1 | tee -a build_action.log
+          curl -L \
+            --fail \
+            --retry 5 \
+            --retry-delay 2 \
+            -o cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+
+          chmod +x cloudflared
+
+          ./cloudflared --version
+
+
+      # ============================================================
+      # START FILE SERVER
+      # ============================================================
+
+      - name: Start file server
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          echo "[STEP] Start file server"
+
+          # --------------------------------------------------------
+          # ROOT FOLDER ĐƯỢC PUBLIC
+          #
+          # Đổi "output" thành folder chứa ROM sau khi pack nếu cần.
+          # --------------------------------------------------------
+
+          SERVER_ROOT="output"
+
+          if [ ! -d "$SERVER_ROOT" ]; then
+            echo "Folder '$SERVER_ROOT' does not exist."
+            echo ""
+            echo "Available folders:"
+            find . -maxdepth 2 -type d | sort
+            exit 1
+          fi
+
+          echo "Serving folder:"
+          realpath "$SERVER_ROOT"
+
+          nohup python3 server.py "$SERVER_ROOT" \
+            > server.log 2>&1 &
+
+          echo $! > server.pid
+
+          sleep 3
+
+          cat server.log
+
+
+      # ============================================================
+      # START CLOUDFLARE QUICK TUNNEL
+      # ============================================================
+
+      - name: Start public tunnel
+        run: |
+          set -e
+
+          echo "[STEP] Start Cloudflare Tunnel"
+
+          nohup ./cloudflared tunnel \
+            --url http://127.0.0.1:8080 \
+            > tunnel.log 2>&1 &
+
+          echo $! > tunnel.pid
+
+          echo "Waiting for public URL..."
+
+          URL=""
+
+          for i in $(seq 1 30); do
+
+            URL=$(grep -oE \
+              'https://[-a-zA-Z0-9]+\.trycloudflare\.com' \
+              tunnel.log \
+              | head -n 1 || true)
+
+            if [ -n "$URL" ]; then
+              break
+            fi
+
+            sleep 2
+
+          done
+
+          if [ -z "$URL" ]; then
+
+            echo "ERROR: Cloudflare URL was not found."
+
+            echo ""
+            echo "===== cloudflared.log ====="
+            cat tunnel.log
+
+            exit 1
+
+          fi
+
+          echo ""
+          echo "============================================================"
+          echo "                 ROM DOWNLOAD SERVER"
+          echo "============================================================"
+          echo ""
+          echo "URL:"
+          echo ""
+          echo "$URL"
+          echo ""
+          echo "============================================================"
+          echo ""
+
+          # GitHub Actions Job Summary
+
+          {
+            echo "# 📱 NothingsVN Xiaomi ROM"
+            echo ""
+            echo "## Download"
+            echo ""
+            echo "### 🌐 $URL"
+            echo ""
+            echo "Open the URL above to browse and download files."
+            echo ""
+            echo "---"
+            echo ""
+            echo "⚠️ Keep this workflow running while downloading."
+            echo ""
+            echo "Use **CLOSE WORKFLOW** from the web interface when finished."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # ============================================================
+      # KEEP SERVER ALIVE
+      # ============================================================
+
+      - name: Keep download server alive
+        run: |
+
+          echo ""
+          echo "============================================================"
+          echo "Download server is running."
+          echo "============================================================"
+          echo ""
+
+          while true; do
+
+            if [ ! -f server.pid ]; then
+              echo "Server PID file disappeared."
+              exit 0
+            fi
+
+            PID=$(cat server.pid)
+
+            if ! kill -0 "$PID" 2>/dev/null; then
+
+              echo "Download server stopped."
+
+              exit 0
+
+            fi
+
+            sleep 5
+
+          done
